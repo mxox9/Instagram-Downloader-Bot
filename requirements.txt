@@ -1,0 +1,5 @@
+telethon
+instaloader
+requests
+redis
+python-dotenv
