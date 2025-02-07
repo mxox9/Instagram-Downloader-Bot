@@ -42,16 +42,19 @@ async def bcast(event):
     msg = await event.get_reply_message()
     xx = await event.reply("Broadcasting...")
     error_count = 0
+    total_users = 0
     users = await db.fetch_all("users")
-    e = ""
+    if not users:
+        return await xx.edit("No users found in the database.")
     for user in users:
         try:
+            total_users += 1
             await client.send_message(int(user[0]), msg)
-        except Exception as e:
+        except Exception as ex:
             error_count += 1
-    await xx.edit(f"Broadcasted message with {error_count} errors.")
-    logging.info(e)
-    
+            logging.error(f"Failed to send message to {user[0]}: {ex}")
+    await xx.edit(f"Broadcasted message to {total_users} users with {error_count} errors.")
+  
 @bot.on(events.NewMessage(pattern='/logs', from_users=Telegram.AUTH_USER_ID))
 async def send_logs(event):
     if os.path.exists(LOG_FILE):
