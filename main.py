@@ -49,10 +49,10 @@ async def bcast(event):
     for user in users:
         try:
             total_users += 1
-            await bot.send_message(int(user[0]), msg)
+            await bot.send_message(int(user), msg)
         except Exception as ex:
             error_count += 1
-            logging.error(f"Failed to send message to {user[0]}: {ex}")
+            logging.error(f"Failed to send message to {user}: {ex}")
     await xx.edit(f"Broadcasted message to {total_users} users with {error_count} errors.")
   
 @bot.on(events.NewMessage(pattern='/logs', from_users=Telegram.AUTH_USER_ID))
