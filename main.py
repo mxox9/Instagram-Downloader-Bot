@@ -49,7 +49,7 @@ async def bcast(event):
     for user in users:
         try:
             total_users += 1
-            await client.send_message(int(user[0]), msg)
+            await bot.send_message(int(user[0]), msg)
         except Exception as ex:
             error_count += 1
             logging.error(f"Failed to send message to {user[0]}: {ex}")
