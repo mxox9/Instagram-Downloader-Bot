@@ -4,6 +4,7 @@ import tempfile
 import os
 import logging
 import time
+from database import db
 from config import Telegram
 from instaloader import Instaloader, Post, Profile
 from telethon import TelegramClient, events
@@ -21,6 +22,31 @@ bot = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 async def start(event):
     await event.reply("Send me an Instagram post or reel Link(URL) to download it.")
     logging.info(f"User {event.sender_id} started the bot.")
+
+@bot.on(events.NewMessage(pattern='/users', from_users=Telegram.AUTH_USER_ID))
+async def users(event):
+    try:
+        users = len(await db.fetch_all("users"))
+        await event.reply(f'Total Users: {users}')
+    except Exception as e:
+        print(e)
+
+@bot.on(events.NewMessage(pattern='/bcast', from_users=Telegram.AUTH_USER_ID))
+async def bcast(event):
+    if not event.reply_to_msg_id:
+        return await event.reply(
+            "Please use `/bcast` as a reply to the message you want to broadcast."
+        )
+    msg = await event.get_reply_message()
+    xx = await event.reply("Broadcasting...")
+    error_count = 0
+    users = await db.fetch_all("users")
+    for user in users:
+        try:
+            await client.send_message(int(user[0]), msg)
+        except Exception:
+            error_count += 1
+    await xx.edit(f"Broadcasted message with {error_count} errors.")
 
 @bot.on(events.NewMessage(pattern='/logs'))
 async def send_logs(event):
