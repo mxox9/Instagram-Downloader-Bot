@@ -20,7 +20,7 @@ bot = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
 @bot.on(events.NewMessage(pattern='/start'))
 async def start(event):
-    await event.reply("Send me an Instagram post/reel URL or profile URL to download content!")
+    await event.reply("Send me an Instagram post or reel Link(URL) to download it.")
     logging.info(f"User {event.sender_id} started the bot.")
 
 @bot.on(events.NewMessage(pattern='/logs'))
