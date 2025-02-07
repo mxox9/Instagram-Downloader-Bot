@@ -22,14 +22,16 @@ bot = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 async def start(event):
     await event.reply("Send me an Instagram post or reel Link(URL) to download it.")
     logging.info(f"User {event.sender_id} started the bot.")
-
+    if not await db.is_inserted("users", int(event.sender_id)):
+        await db.insert("users", int(event.sender_id))
+        
 @bot.on(events.NewMessage(pattern='/users', from_users=Telegram.AUTH_USER_ID))
 async def users(event):
     try:
         users = len(await db.fetch_all("users"))
         await event.reply(f'Total Users: {users}')
     except Exception as e:
-        print(e)
+        logging.info(e)
 
 @bot.on(events.NewMessage(pattern='/bcast', from_users=Telegram.AUTH_USER_ID))
 async def bcast(event):
@@ -41,14 +43,16 @@ async def bcast(event):
     xx = await event.reply("Broadcasting...")
     error_count = 0
     users = await db.fetch_all("users")
+    e = ""
     for user in users:
         try:
             await client.send_message(int(user[0]), msg)
-        except Exception:
+        except Exception as e:
             error_count += 1
     await xx.edit(f"Broadcasted message with {error_count} errors.")
-
-@bot.on(events.NewMessage(pattern='/logs'))
+    logging.info(e)
+    
+@bot.on(events.NewMessage(pattern='/logs', from_users=Telegram.AUTH_USER_ID))
 async def send_logs(event):
     if os.path.exists(LOG_FILE):
         await bot.send_file(event.chat_id, LOG_FILE)
