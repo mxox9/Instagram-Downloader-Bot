@@ -4,12 +4,14 @@ import tempfile
 import os
 import logging
 import time
+import dotenv
 from instaloader import Instaloader, Post, Profile
 from telethon import TelegramClient, events
 
-API_ID = os.environ.get('API_ID')
-API_HASH = os.environ.get('API_HASH')
-BOT_TOKEN = os.environ.get('BOT_TOKEN')
+dotenv.load_dotenv()
+API_ID = int(os.getenv("API_ID"))
+API_HASH = os.getenv("API_HASH")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 LOG_FILE = "log.txt"
 logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -34,6 +36,9 @@ async def handle_message(event):
     text = event.message.text.strip()
     logging.info(f"Received message: {text} from user {event.sender_id}")
 
+    if text.startswith("/"):
+        return  
+
     post_reel_pattern = r'^https?://(www\.)?instagram\.com/(p|reel)/([a-zA-Z0-9_-]+)/?.*'
     profile_pattern = r'^https?://(www\.)?instagram\.com/([^/?]+)(?:\?.*)?$'
 
@@ -54,19 +59,24 @@ async def handle_message(event):
 
 async def download_instagram_post(event, shortcode):
     L = Instaloader()
-    downloading_message = await event.reply("🔄 Downloading Instagram post...")
+    start_time = time.time()
+    downloading_message = await event.reply("🔄 Downloading Instagram post... (Estimating time)")
     logging.info(f"Downloading post: {shortcode}")
 
     try:
-        start_time = time.time()
         post = Post.from_shortcode(L.context, shortcode)
-
         url = post.video_url if post.is_video else post.url
         media_type = 'video' if post.is_video else 'photo'
         caption = post.caption if post.caption else ""
 
         response = requests.get(url, stream=True, timeout=10)
         response.raise_for_status()
+
+        expected_time = response.headers.get('Content-Length')
+        if expected_time:
+            expected_time = round(int(expected_time) / (500 * 1024), 2)
+
+        await bot.edit_message(event.chat_id, downloading_message.id, f"🔄 Downloading Instagram post... (~{expected_time}s)")
 
         suffix = '.mp4' if media_type == 'video' else '.jpg'
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
@@ -79,10 +89,9 @@ async def download_instagram_post(event, shortcode):
         logging.info(f"Download complete: {shortcode} in {download_time:.2f} sec.")
 
         await bot.send_file(event.chat_id, temp_file.name, caption=caption if caption else None)
-
         os.unlink(temp_file.name)
-        logging.info(f"Upload complete: {shortcode}")
 
+        logging.info(f"Upload complete: {shortcode}")
         await bot.delete_messages(event.chat_id, [downloading_message.id])
 
     except requests.RequestException as e:
@@ -94,13 +103,12 @@ async def download_instagram_post(event, shortcode):
 
 async def download_profile_pic(event, username):
     L = Instaloader()
+    start_time = time.time()
     downloading_message = await event.reply("🔄 Downloading profile picture...")
     logging.info(f"Downloading profile picture for: {username}")
 
     try:
-        start_time = time.time()
         profile = Profile.from_username(L.context, username)
-
         url = profile.profile_pic_url
         bio = profile.biography if profile.biography else ""
 
@@ -117,10 +125,9 @@ async def download_profile_pic(event, username):
         logging.info(f"Download complete for {username} in {download_time:.2f} sec.")
 
         await bot.send_file(event.chat_id, temp_file.name, caption=bio if bio else None)
-
         os.unlink(temp_file.name)
-        logging.info(f"Upload complete for {username}")
 
+        logging.info(f"Upload complete for {username}")
         await bot.delete_messages(event.chat_id, [downloading_message.id])
 
     except requests.RequestException as e:
@@ -132,5 +139,5 @@ async def download_profile_pic(event, username):
 
 if __name__ == "__main__":
     logging.info("Bot is starting...")
-    print("✅ Bot is running!") 
+    print("✅ Bot is running!")
     bot.run_until_disconnected()
