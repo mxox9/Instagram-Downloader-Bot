@@ -4,14 +4,13 @@ import tempfile
 import os
 import logging
 import time
-import dotenv
+from config import Telegram
 from instaloader import Instaloader, Post, Profile
 from telethon import TelegramClient, events
 
-dotenv.load_dotenv()
-API_ID = int(os.getenv("API_ID"))
-API_HASH = os.getenv("API_HASH")
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+API_ID = Telegram.API_ID 
+API_HASH = Telegram.API_HASH
+BOT_TOKEN = Telegram.BOT_TOKEN
 
 LOG_FILE = "log.txt"
 logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
