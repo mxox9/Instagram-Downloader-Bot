@@ -1,44 +1,60 @@
 import re
 import requests
+import tempfile
 import os
 import logging
 import time
-import asyncio
-from io import BytesIO
 from database import db
 from config import Telegram
-from instaloader import Instaloader, Post, Profile, Story
+from instaloader import Instaloader, Post, Profile
 from telethon import TelegramClient, events
-from telethon.tl.types import DocumentAttributeFilename
 
 API_ID = Telegram.API_ID 
 API_HASH = Telegram.API_HASH
 BOT_TOKEN = Telegram.BOT_TOKEN
-SESSION_ID = Telegram.SESSION_ID
-#SESSION_ID = getattr(Telegram, 'SESSION_ID', None)
 
 LOG_FILE = "log.txt"
-logging.basicConfig(filename=LOG_FILE, level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 bot = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
-def get_instaloader():
-    L = Instaloader()
-    if SESSION_ID:
-        try:
-            L.load_session_from_file(SESSION_ID)
-        except Exception as e:
-            logging.error(f"Failed to load session: {e}")
-            print(f"Failed to load session: {e}")
-    return L
-
 @bot.on(events.NewMessage(pattern='/start'))
 async def start(event):
-    await event.reply("Send me an Instagram post/reel, story, or profile URL to download it.")
+    await event.reply("Send me an Instagram post or reel Link(URL) to download it.")
     logging.info(f"User {event.sender_id} started the bot.")
     if not await db.is_inserted("users", int(event.sender_id)):
         await db.insert("users", int(event.sender_id))
+        
+@bot.on(events.NewMessage(pattern='/users', from_users=Telegram.AUTH_USER_ID))
+async def users(event):
+    try:
+        users = len(await db.fetch_all("users"))
+        await event.reply(f'Total Users: {users}')
+    except Exception as e:
+        logging.info(e)
 
+@bot.on(events.NewMessage(pattern='/bcast', from_users=Telegram.AUTH_USER_ID))
+async def bcast(event):
+    if not event.reply_to_msg_id:
+        return await event.reply(
+            "Please use `/bcast` as a reply to the message you want to broadcast."
+        )
+    msg = await event.get_reply_message()
+    xx = await event.reply("Broadcasting...")
+    error_count = 0
+    total_users = 0
+    users = await db.fetch_all("users")
+    if not users:
+        return await xx.edit("No users found in the database.")
+    for user in users:
+        try:
+            total_users += 1
+            await bot.send_message(int(user), msg)
+        except Exception as ex:
+            error_count += 1
+            logging.error(f"Failed to send message to {user}: {ex}")
+    await xx.edit(f"Broadcasted message to {total_users} users with {error_count} errors.")
+  
 @bot.on(events.NewMessage(pattern='/logs', from_users=Telegram.AUTH_USER_ID))
 async def send_logs(event):
     if os.path.exists(LOG_FILE):
@@ -56,164 +72,102 @@ async def handle_message(event):
         return  
 
     post_reel_pattern = r'^https?://(www\.)?instagram\.com/(p|reel)/([a-zA-Z0-9_-]+)/?.*'
-    profile_pattern = r'^https?://(www\.)?instagram\.com/([a-zA-Z0-9_.-]+)(?:\?.*)?$'
-    story_pattern = r'^https?://(www\.)?instagram\.com/stories/([^/]+)/(\d+)/?.*'
+    profile_pattern = r'^https?://(www\.)?instagram\.com/([^/?]+)(?:\?.*)?$'
 
     post_reel_match = re.match(post_reel_pattern, text)
     profile_match = re.match(profile_pattern, text)
-    story_match = re.match(story_pattern, text)
 
     if post_reel_match:
         shortcode = post_reel_match.group(3)
         await download_instagram_post(event, shortcode)
     elif profile_match:
-        username = profile_match.group(1)
-        if username.lower() in ["p", "reel", "stories", "explore"]:
+        username = profile_match.group(2)
+        if username in ["p", "reel", "stories", "explore"]:
             return
         await download_profile_pic(event, username)
-    elif story_match:
-        if not SESSION_ID:
-            await event.reply("❌ Story downloads require an active Instagram session.")
-            return
-        username = story_match.group(2)
-        await download_story(event, username)
     else:
         await event.reply("Please send a valid Instagram URL.")
         logging.warning(f"Invalid URL received: {text}")
 
 async def download_instagram_post(event, shortcode):
-    L = get_instaloader()
+    L = Instaloader()
     start_time = time.time()
-    downloading_message = await event.reply("🔄 Downloading Instagram post...")
-    
+    downloading_message = await event.reply("🔄 Downloading Instagram post... (Estimating time)")
+    logging.info(f"Downloading post: {shortcode}")
+
     try:
         post = Post.from_shortcode(L.context, shortcode)
         url = post.video_url if post.is_video else post.url
         media_type = 'video' if post.is_video else 'photo'
-        caption = post.caption[:1024] if post.caption else None
+        caption = post.caption if post.caption else ""
 
         response = requests.get(url, stream=True, timeout=10)
         response.raise_for_status()
 
-        chunk_size = 256 * 1024
-        buffer = BytesIO()
-        total_size = int(response.headers.get('content-length', 0))
-        downloaded = 0
-        last_update = 0
+        expected_time = response.headers.get('Content-Length')
+        if expected_time:
+            expected_time = round(int(expected_time) / (500 * 1024), 2)
 
-        for chunk in response.iter_content(chunk_size):
-            if chunk:
-                downloaded += len(chunk)
-                buffer.write(chunk)
-                progress = (downloaded / total_size * 100) if total_size > 0 else 0
-                if progress - last_update >= 10:
-                    await downloading_message.edit(f"⬇️ Downloading... {progress:.1f}%")
-                    last_update = progress
+        await bot.edit_message(event.chat_id, downloading_message.id, f"🔄 Downloading Instagram post... (~{expected_time}s)")
 
-        buffer.seek(0)
-        await downloading_message.edit("⬆️ Uploading...")
+        suffix = '.mp4' if media_type == 'video' else '.jpg'
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
+            for chunk in response.iter_content(chunk_size=8192):
+                temp_file.write(chunk)
+            temp_file.flush()
+            temp_file.close()
 
-        if media_type == 'video':
-            file_extension = "mp4"
-            mime_type = "video/mp4"
-        else:
-            file_extension = "jpg"
-            mime_type = "image/jpeg"
+        download_time = time.time() - start_time
+        logging.info(f"Download complete: {shortcode} in {download_time:.2f} sec.")
 
-        file_name = f"{shortcode}.{file_extension}"
-        await bot.send_file(
-             event.chat_id, buffer, file_name=file_name, caption=caption, 
-             force_document=False, attributes=[], mime_type=mime_type
-         )
-    
-        #file_name = f"{shortcode}.mp4" if media_type == 'video' else f"{shortcode}.jpg"
-        #await bot.send_file(event.chat_id, buffer, file_name=file_name, caption=caption, force_document=False)
-        #await bot.send_file(event.chat_id, buffer, file_name=file_name, caption=caption, force_document=False, attributes=[DocumentAttributeFilename(file_name)])
-        
+        await bot.send_file(event.chat_id, temp_file.name, caption=caption if caption else None)
+        os.unlink(temp_file.name)
+
+        logging.info(f"Upload complete: {shortcode}")
+        await bot.delete_messages(event.chat_id, [downloading_message.id])
+
+    except requests.RequestException as e:
+        await event.reply("❌ Failed to download media. Please try again later.")
+        logging.error(f"Request error for {shortcode}: {e}")
     except Exception as e:
         await event.reply(f"❌ Error: {str(e)}")
         logging.error(f"Error downloading {shortcode}: {e}")
-        print(f"Error: {e}")
-    finally:
-        await bot.delete_messages(event.chat_id, [downloading_message.id])
-        buffer.close()
 
 async def download_profile_pic(event, username):
-    L = get_instaloader()
+    L = Instaloader()
+    start_time = time.time()
     downloading_message = await event.reply("🔄 Downloading profile picture...")
-    
+    logging.info(f"Downloading profile picture for: {username}")
+
     try:
         profile = Profile.from_username(L.context, username)
         url = profile.profile_pic_url
-        bio = profile.biography[:1024] if profile.biography else None
+        bio = profile.biography if profile.biography else ""
 
         response = requests.get(url, stream=True, timeout=10)
         response.raise_for_status()
 
-        buffer = BytesIO()
-        for chunk in response.iter_content(256 * 1024):
-            buffer.write(chunk)
-        buffer.seek(0)
+        with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as temp_file:
+            for chunk in response.iter_content(chunk_size=8192):
+                temp_file.write(chunk)
+            temp_file.flush()
+            temp_file.close()
 
-        await bot.send_file(
-            event.chat_id, buffer, file_name=f"{username}_profile.jpg", caption=bio,
-            force_document=False, attributes=[], mime_type="image/jpeg"
-        )
-        #await bot.send_file(event.chat_id, buffer, file_name=f"{username}_profile.jpg", caption=bio, force_document=False, attributes=[DocumentAttributeFilename(f"{username}_profile.jpg")])
-        #await bot.send_file(event.chat_id, buffer, file_name=f"{username}_profile.jpg", caption=bio)
-    
+        download_time = time.time() - start_time
+        logging.info(f"Download complete for {username} in {download_time:.2f} sec.")
+
+        await bot.send_file(event.chat_id, temp_file.name, caption=bio if bio else None)
+        os.unlink(temp_file.name)
+
+        logging.info(f"Upload complete for {username}")
+        await bot.delete_messages(event.chat_id, [downloading_message.id])
+
+    except requests.RequestException as e:
+        await event.reply("❌ Failed to download profile picture. Please try again later.")
+        logging.error(f"Request error for {username}: {e}")
     except Exception as e:
         await event.reply(f"❌ Error: {str(e)}")
         logging.error(f"Error downloading profile {username}: {e}")
-        print(f"Error: {e}")
-    finally:
-        await bot.delete_messages(event.chat_id, [downloading_message.id])
-        buffer.close()
-
-async def download_story(event, username):
-    L = get_instaloader()
-    downloading_message = await event.reply("🔄 Downloading story...")
-    
-    try:
-        profile = Profile.from_username(L.context, username)
-        stories = Story.from_profile(L.context, profile).get_items()
-
-        if not stories:
-            return await event.reply("❌ No active stories found.")
-
-        for story in stories:
-            url = story.video_url if story.is_video else story.url
-            response = requests.get(url, stream=True, timeout=10)
-            response.raise_for_status()
-
-            buffer = BytesIO()
-            for chunk in response.iter_content(256 * 1024):
-                buffer.write(chunk)
-            buffer.seek(0)
-
-            if story.is_video:
-                file_extension = "mp4"
-                mime_type = "video/mp4"
-            else:
-                file_extension = "jpg"
-                mime_type = "image/jpeg"
-
-            file_name = f"{username}_story.{file_extension}"
-            await bot.send_file(
-                event.chat_id, buffer, file_name=file_name, force_document=False, 
-                attributes=[], mime_type=mime_type
-            )
-           # file_name = f"{username}_story.mp4" if story.is_video else f"{username}_story.jpg"
-           # await bot.send_file(event.chat_id, buffer, file_name=file_name, force_document=False)
-
-            buffer.close()
-
-    except Exception as e:
-        await event.reply(f"❌ Error: {str(e)}")
-        logging.error(f"Error downloading story for {username}: {e}")
-        print(f"Error: {e}")
-    finally:
-        await bot.delete_messages(event.chat_id, [downloading_message.id])
 
 if __name__ == "__main__":
     logging.info("Bot is starting...")
