@@ -120,8 +120,8 @@ async def download_instagram_post(event, shortcode):
             file_extension = "jpg"
             mime_type = "image/jpeg"
 
-         file_name = f"{shortcode}.{file_extension}"
-         await bot.send_file(
+        file_name = f"{shortcode}.{file_extension}"
+        await bot.send_file(
              event.chat_id, buffer, file_name=file_name, caption=caption, 
              force_document=False, attributes=[], mime_type=mime_type
          )
