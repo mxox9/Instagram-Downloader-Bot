@@ -113,9 +113,22 @@ async def download_instagram_post(event, shortcode):
         buffer.seek(0)
         await downloading_message.edit("⬆️ Uploading...")
 
-        file_name = f"{shortcode}.mp4" if media_type == 'video' else f"{shortcode}.jpg"
+        if media_type == 'video':
+            file_extension = "mp4"
+            mime_type = "video/mp4"
+        else:
+            file_extension = "jpg"
+            mime_type = "image/jpeg"
+
+         file_name = f"{shortcode}.{file_extension}"
+         await bot.send_file(
+             event.chat_id, buffer, file_name=file_name, caption=caption, 
+             force_document=False, attributes=[], mime_type=mime_type
+         )
+    
+        #file_name = f"{shortcode}.mp4" if media_type == 'video' else f"{shortcode}.jpg"
         #await bot.send_file(event.chat_id, buffer, file_name=file_name, caption=caption, force_document=False)
-        await bot.send_file(event.chat_id, buffer, file_name=file_name, caption=caption, force_document=False, attributes=[DocumentAttributeFilename(file_name)])
+        #await bot.send_file(event.chat_id, buffer, file_name=file_name, caption=caption, force_document=False, attributes=[DocumentAttributeFilename(file_name)])
         
     except Exception as e:
         await event.reply(f"❌ Error: {str(e)}")
@@ -142,7 +155,11 @@ async def download_profile_pic(event, username):
             buffer.write(chunk)
         buffer.seek(0)
 
-        await bot.send_file(event.chat_id, buffer, file_name=f"{username}_profile.jpg", caption=bio, force_document=False, attributes=[DocumentAttributeFilename(f"{username}_profile.jpg")])
+        await bot.send_file(
+            event.chat_id, buffer, file_name=f"{username}_profile.jpg", caption=bio,
+            force_document=False, attributes=[], mime_type="image/jpeg"
+        )
+        #await bot.send_file(event.chat_id, buffer, file_name=f"{username}_profile.jpg", caption=bio, force_document=False, attributes=[DocumentAttributeFilename(f"{username}_profile.jpg")])
         #await bot.send_file(event.chat_id, buffer, file_name=f"{username}_profile.jpg", caption=bio)
     
     except Exception as e:
@@ -174,8 +191,20 @@ async def download_story(event, username):
                 buffer.write(chunk)
             buffer.seek(0)
 
-            file_name = f"{username}_story.mp4" if story.is_video else f"{username}_story.jpg"
-            await bot.send_file(event.chat_id, buffer, file_name=file_name, force_document=False)
+            if story.is_video:
+                file_extension = "mp4"
+                mime_type = "video/mp4"
+            else:
+                file_extension = "jpg"
+                mime_type = "image/jpeg"
+
+            file_name = f"{username}_story.{file_extension}"
+            await bot.send_file(
+                event.chat_id, buffer, file_name=file_name, force_document=False, 
+                attributes=[], mime_type=mime_type
+            )
+           # file_name = f"{username}_story.mp4" if story.is_video else f"{username}_story.jpg"
+           # await bot.send_file(event.chat_id, buffer, file_name=file_name, force_document=False)
 
             buffer.close()
 
