@@ -9,11 +9,13 @@ from database import db
 from config import Telegram
 from instaloader import Instaloader, Post, Profile, Story
 from telethon import TelegramClient, events
+from telethon.tl.types import DocumentAttributeFilename
 
 API_ID = Telegram.API_ID 
 API_HASH = Telegram.API_HASH
 BOT_TOKEN = Telegram.BOT_TOKEN
-SESSION_ID = getattr(Telegram, 'SESSION_ID', None)
+SESSION_ID = Telegram.SESSION_ID
+#SESSION_ID = getattr(Telegram, 'SESSION_ID', None)
 
 LOG_FILE = "log.txt"
 logging.basicConfig(filename=LOG_FILE, level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -112,8 +114,9 @@ async def download_instagram_post(event, shortcode):
         await downloading_message.edit("⬆️ Uploading...")
 
         file_name = f"{shortcode}.mp4" if media_type == 'video' else f"{shortcode}.jpg"
-        await bot.send_file(event.chat_id, buffer, file_name=file_name, caption=caption, force_document=False)
-
+        #await bot.send_file(event.chat_id, buffer, file_name=file_name, caption=caption, force_document=False)
+        await bot.send_file(event.chat_id, buffer, file_name=file_name, caption=caption, force_document=False, attributes=[DocumentAttributeFilename(file_name)])
+        
     except Exception as e:
         await event.reply(f"❌ Error: {str(e)}")
         logging.error(f"Error downloading {shortcode}: {e}")
@@ -139,8 +142,9 @@ async def download_profile_pic(event, username):
             buffer.write(chunk)
         buffer.seek(0)
 
-        await bot.send_file(event.chat_id, buffer, file_name=f"{username}_profile.jpg", caption=bio)
-        
+        await bot.send_file(event.chat_id, buffer, file_name=f"{username}_profile.jpg", caption=bio, force_document=False, attributes=[DocumentAttributeFilename(f"{username}_profile.jpg")])
+        #await bot.send_file(event.chat_id, buffer, file_name=f"{username}_profile.jpg", caption=bio)
+    
     except Exception as e:
         await event.reply(f"❌ Error: {str(e)}")
         logging.error(f"Error downloading profile {username}: {e}")
