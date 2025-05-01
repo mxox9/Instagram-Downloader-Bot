@@ -1,79 +1,35 @@
-import asyncio
-from redis.asyncio import Redis
-from config import Database
-from typing import List, Union
+import redis
+from config import Config
 
-class RedisClient:
-    def __init__(self, host: str, port: int, password: str):
-        self.db = Redis(
-            host=host,
-            port=port,
-            password=password,
-            ssl=True,
-            decode_responses=True
+class Database:
+    def __init__(self):
+        self.redis = redis.Redis(
+            host=Config.REDIS_HOST,
+            port=Config.REDIS_PORT,
+            password=Config.REDIS_PASSWORD,
+            db=Config.REDIS_DB,
+            decode_responses=False
         )
+    
+    def set_user_credentials(self, user_id: int, username: str, password: str):
+        self.redis.hset(
+            f"user:{user_id}",
+            mapping={
+                "username": username,
+                "password": password
+            }
+        )
+    
+    def delete_user_credentials(self, user_id: int):
+        return self.redis.delete(f"user:{user_id}")
+    
+    def get_user_credentials(self, user_id: int):
+        creds = self.redis.hgetall(f"user:{user_id}")
+        if creds:
+            return (
+                creds.get(b"username", b"").decode(),
+                creds.get(b"password", b"").decode()
+            )
+        return None, None
 
-    def s_l(self, text: str) -> List[str]:
-        return text.split(" ")
-
-    def l_s(self, lst: List[str]) -> str:
-        return " ".join(lst).strip()
-
-    def ensure_str(self, value: Union[str, int]) -> str:
-        if isinstance(value, (str, int)):
-            return str(value)
-        else:
-            raise ValueError("Invalid input type: value should be str or int")
-
-    async def is_inserted(self, var: Union[str, int], id: Union[str, int]) -> bool:
-        try:
-            var_str = self.ensure_str(var)
-            id_str = self.ensure_str(id)
-            users = await self.fetch_all(var_str)
-            return id_str in users
-        except Exception as e:
-            print(f"Error in is_inserted: {e}")
-            return False
-
-    async def insert(self, var: Union[str, int], id: Union[str, int]) -> bool:
-        try:
-            var_str = self.ensure_str(var)
-            id_str = self.ensure_str(id)
-            users = await self.fetch_all(var_str)
-            if id_str not in users:
-                users.append(id_str)
-                await self.db.set(var_str, self.l_s(users))
-            return True
-        except Exception as e:
-            print(f"Error in insert: {e}")
-            return False
-
-    async def fetch_all(self, var: str) -> List[str]:
-        if not isinstance(var, str):
-            raise ValueError("Invalid input type: 'var' should be str")
-        
-        try:
-            users = await self.db.get(var)
-            return [] if users is None or users == "" else self.s_l(users)
-        except Exception as e:
-            print(f"Error in fetch_all: {e}")
-            return []
-
-    async def delete(self, var: Union[str, int], id: Union[str, int]) -> bool:
-        try:
-            var_str = self.ensure_str(var)
-            id_str = self.ensure_str(id)
-            users = await self.fetch_all(var_str)
-            if id_str in users:
-                users.remove(id_str)
-                await self.db.set(var_str, self.l_s(users))
-            return True
-        except Exception as e:
-            print(f"Error in delete: {e}")
-            return False
-          
-host = Database.REDIS_HOST
-port = Database.REDIS_PORT
-password = Database.REDIS_PASSWORD
-
-db = RedisClient(host, port, password)
+db = Database()
