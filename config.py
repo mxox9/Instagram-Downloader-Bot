@@ -3,14 +3,22 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-class Telegram:
-    API_ID = int(os.environ.get('API_ID'))
-    API_HASH = os.environ.get('API_HASH')
-    BOT_TOKEN = os.environ.get('BOT_TOKEN')
-    AUTH_USER_ID = list(map(int, filter(None, os.environ.get("AUTH_USER_ID", "").split())))
-    SESSION_ID = os.environ.get('SESSION_ID', None)
+class Config:
+    # Telegram API
+    API_ID = int(os.getenv("API_ID", 0))
+    API_HASH = os.getenv("API_HASH", "")
+    BOT_TOKEN = os.getenv("BOT_TOKEN", "")
     
-class Database:
-    REDIS_HOST = os.environ.get('REDIS_HOST') # Example: ec2.redns.redis-cloud.com, local-elephant-58690.upstash.io
-    REDIS_PORT = int(os.environ.get('REDIS_PORT')) #Example 8080, 47384
-    REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD')
+    # Redis
+    REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+    REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+    REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
+    REDIS_DB = int(os.getenv("REDIS_DB", 0))
+    
+    # Instagram (optional)
+    INSTA_USERNAME = os.getenv("INSTA_USERNAME", None)
+    INSTA_PASSWORD = os.getenv("INSTA_PASSWORD", None)
+    
+    @property
+    def has_insta_creds(self):
+        return bool(self.INSTA_USERNAME and self.INSTA_PASSWORD)
