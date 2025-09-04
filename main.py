@@ -1,6 +1,6 @@
 from pyrogram import Client
 from config import Config
-import handlers  # noqa: F401  (to register handlers)
+import handler  # noqa: F401  (to register handler)
 
 app = Client(
     "insta-bot",
