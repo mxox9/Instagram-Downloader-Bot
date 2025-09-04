@@ -1,5 +1,3 @@
-telethon
-instaloader
+pyrogram
+tgcrypto
 requests
-redis
-python-dotenv
