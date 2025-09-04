@@ -1,6 +1,6 @@
 from telethon import TelegramClient, events
 from config import Config
-from handlers import *
+from handler import *
 import logging
 
 logging.basicConfig(format='[%(levelname)s] %(message)s', level=logging.INFO)
