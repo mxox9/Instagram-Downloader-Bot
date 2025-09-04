@@ -3,8 +3,7 @@ import re
 
 def get_instagram_media(url: str):
     """
-    Download public Instagram reels/videos/images without login.
-    Works only for PUBLIC posts/reels.
+    Try to extract media (video/image) from Instagram public URL.
     """
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
@@ -12,21 +11,23 @@ def get_instagram_media(url: str):
     try:
         r = requests.get(url, headers=headers, timeout=10)
         if r.status_code != 200:
-            return None, "Failed to fetch page"
+            raise Exception("Failed to fetch page")
 
-        # video_url निकालो
-        match = re.search(r'"video_url":"([^"]+)"', r.text)
-        if match:
-            video_url = match.group(1).replace("\\u0026", "&")
-            return video_url, None
+        html = r.text
 
-        # अगर image है
-        match_img = re.search(r'"display_url":"([^"]+)"', r.text)
-        if match_img:
-            image_url = match_img.group(1).replace("\\u0026", "&")
-            return image_url, None
+        # Try to find video
+        video_match = re.search(r'"video_url":"([^"]+)"', html)
+        if video_match:
+            video_url = video_match.group(1).replace("\\u0026", "&").replace("\\/", "/")
+            return {"type": "video", "url": video_url}
 
-        return None, "❌ Media not found (maybe private account?)"
+        # Try to find image
+        image_match = re.search(r'"display_url":"([^"]+)"', html)
+        if image_match:
+            img_url = image_match.group(1).replace("\\u0026", "&").replace("\\/", "/")
+            return {"type": "photo", "url": img_url}
 
+        return None
     except Exception as e:
-        return None, str(e)
+        print("Error:", e)
+        return None
