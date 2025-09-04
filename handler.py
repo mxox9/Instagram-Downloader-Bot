@@ -1,26 +1,54 @@
-        from pyrogram import Client, filters
+from pyrogram import Client, filters
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from utils import get_instagram_media
 
 @Client.on_message(filters.command("start"))
-def start_handler(client, message):
-    message.reply_text(
-        "👋 Welcome!\n\n"
-        "Send me any Instagram public reel/post link and I will download it for you.\n\n"
-        "👉 Usage: /download <Instagram_URL>"
+async def start(client, message):
+    buttons = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📚 Help", callback_data="help"),
+         InlineKeyboardButton("ℹ️ About", callback_data="about")]
+    ])
+    await message.reply_text(
+        f"✨ Welcome {message.from_user.first_name}!\n\n"
+        "Send me any public Instagram reel/post link and I’ll download it for you.",
+        reply_markup=buttons
     )
 
-@Client.on_message(filters.command("download"))
-def download_handler(client, message):
-    if len(message.command) < 2:
-        return message.reply_text("⚠️ Please provide an Instagram reel/post link.\n\nExample:\n`/download https://www.instagram.com/reel/xxxx/`")
+@Client.on_callback_query()
+async def callbacks(client, callback_query):
+    if callback_query.data == "help":
+        await callback_query.message.edit_text(
+            "📚 **Help**\n\n"
+            "1. Copy a public Instagram post/reel URL\n"
+            "2. Send it here\n"
+            "3. Bot will download media and send back"
+        )
+    elif callback_query.data == "about":
+        await callback_query.message.edit_text(
+            "ℹ️ **About**\n\n"
+            "Simple Instagram Downloader Bot\n"
+            "Works only for *public* content."
+        )
 
-    url = message.command[1]
-    media_url, error = get_instagram_media(url)
+@Client.on_message(filters.text & ~filters.command(["start", "help", "about"]))
+async def download_instagram(client, message):
+    url = message.text.strip()
 
-    if error:
-        message.reply_text(f"❌ Error: {error}")
-    else:
-        if ".mp4" in media_url:
-            message.reply_video(media_url, caption="✅ Here is your Instagram video 🎬")
+    if "instagram.com" not in url:
+        return await message.reply_text("❌ Please send a valid Instagram link.")
+
+    status = await message.reply_text("⏳ Fetching media...")
+
+    media = get_instagram_media(url)
+    if not media:
+        return await status.edit("❌ Could not fetch media. Maybe link is invalid or private.")
+
+    try:
+        if media["type"] == "video":
+            await client.send_video(message.chat.id, media["url"], caption="🎥 Here is your video")
         else:
-            message.reply_photo(media_url, caption="✅ Here is your Instagram photo 🖼️")
+            await client.send_photo(message.chat.id, media["url"], caption="📸 Here is your photo")
+
+        await status.delete()
+    except Exception as e:
+        await status.edit(f"❌ Failed: {str(e)}")
